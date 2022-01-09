@@ -1,0 +1,455 @@
+---
+title: "La epidemia de los opioides en Estados Unidos"
+subtitle: "Lawrence Daniel Phillips Bates (ladap@alumni.uv.es)" 
+author: "Universitat de València"
+date: "Enero de 2021 (actualizado el `r format(Sys.time(), '%d-%m-%Y')`)"
+output:
+  html_document:
+    #css: "./assets/my_css_file.css"
+    theme: united
+    highlight: textmate 
+    toc: true
+    toc_depth: 3 
+    toc_float: 
+      collapsed: true
+      smooth_scroll: true
+    self_contained: true
+    number_sections: false
+    df_print: kable
+    code_download: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r packages-setup, include = FALSE}
+library(tidyverse)
+library(klippy)
+library(knitr)
+library(gt)
+library(ggthemes)
+library(gganimate)
+#devtools::install_github("thomasp85/transformr")
+library(maps)
+library(plotly)
+library(paletteer)
+library(extrafont)
+```
+
+```{r chunk-setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, message = FALSE, warning = FALSE, 
+                      #results = "hold",
+                      cache = FALSE, cache.path = "/caches/", comment = "#>",
+                      #fig.width = 7, #fig.height= 7,   
+                      #out.width = 7, out.height = 7,
+                      collapse = TRUE,  fig.show = "hold",
+                      fig.asp = 0.628, out.width = "75%", fig.align = "center")
+knitr::opts_chunk$set(dev = "png", dev.args = list(type = "cairo-png"))
+```
+
+
+```{r options-setup, include = FALSE}
+options(scipen = 999) #- para quitar la notación científica
+options("yaml.eval.expr" = TRUE) 
+```
+
+
+```{r klippy, echo = FALSE}
+klippy::klippy(position = c("top", "right")) #- remotes::install_github("rlesur/klippy")
+```
+
+
+<hr class="linea-black">
+
+<!-- El párrafo de abajo has de dejarlo casi igual, solo HAS de SUSTITUIR "perezp44" por tu usuario de Github-->
+Trabajo elaborado para la asignatura "Programación y manejo de datos en la era del Big Data" de la Universitat de València durante el curso 2021-2022. El repo del trabajo está [aquí](https://github.com/lorenzo1999/trabajo_BigData){target="_blank"}. 
+
+<!-- El párrafo de abajo has de dejarlo exactamente igual, NO HAS DE CAMBIAR NADA-->
+
+La página web de la asignatura y los trabajos de mis compañeros pueden verse [aquí](https://perezp44.github.io/intro-ds-21-22-web/07-trabajos.html){target="_blank"}.
+
+
+<hr class="linea-red">
+
+```{r codigo comun, echo = FALSE, eval = TRUE}
+
+df_completo <- rio::import(here::here("./datos/Tidy_drug_data.csv"))
+
+#Eliminamos espacios en blanco de los nombres de las columnas
+names(df_completo) <- gsub(" ", "_", names(df_completo))
+
+colnames(df_completo)[3] <- "Mujeres"
+colnames(df_completo)[4] <- "Hombres"
+colnames(df_completo)[6] <- "Mujeres"
+colnames(df_completo)[7] <- "Hombres"
+colnames(df_completo)[9] <- "Mujeres"
+colnames(df_completo)[10] <- "Hombres"
+colnames(df_completo)[8] <- "opioides_de_prescripción"
+colnames(df_completo)[21] <- "Mujeres"
+colnames(df_completo)[22] <- "Hombres"
+colnames(df_completo)[18] <- "Mujeres"
+colnames(df_completo)[19] <- "Hombres"
+colnames(df_completo)[17] <-  "Synthetic_opioids"
+```
+
+# Introducción
+
+<br>
+
+Las drogas, y concretamente la morfina, han existido durante cientos de milenios en nuestro planeta (de manera natural), pero fue recientemente cuando se observó su potencial terapéutico. Existe evidencia del uso del opio como medicina desde hace casi cuatro mil años pero su uso más generalizado se ha impuesto durante los últimos 150 años, a la vez que la nueva ciencia/química ha surgido como una rama de conocimiento humano. Ahora, además del opio natural, se han creado derivados sintéticos mucho más potentes y eficaces en realizar su tarea de reducir el dolor. Esto, a primera vista es bueno ya que supone una mejora de la calidad de vida de los pacientes exponencial pero estas drogas son muy adictivos lo que puede llevar a la drogodependencia. A esta drogodependencia, se le atribuye mayor criminalidad, mayor riesgo de transmisión de VIH y hepatitis C, menor calidad de vida, riesgo de sobredosis e incluso la muerte.
+
+<br>
+
+```{r grafico general, echo = FALSE, eval = TRUE}
+
+df_sobredosis_total <- df_completo %>% select(1,2,3,4) %>% pivot_longer(cols = 3:4, names_to = "Género") %>% group_by(Género, Year) %>% ggplot() + geom_line(aes(Year, value, colour = Género), size = 2, alpha = 2) + geom_bar(aes(Year, Total_Overdose_Deaths/2), stat = "identity", fill = "blue", alpha = 0.1) + theme_clean() + labs(
+  title = "Sobredosis en EEUU (por cualquier droga)",
+  subtitle = "Barras representan el nº total",
+  caption = "Elaboración propia a partir de datos del CDC",
+  y = "Muertes\n",
+  x = "\nAño"
+) + scale_y_continuous(breaks = seq(0, 75000, by = 10000)) + scale_x_continuous(breaks = seq(1999, 2019, by = 5)) 
+
+df_sobredosis_total
+#está sumando la variable total de sobredosis dos veces porque está en el dataframe dos veces en cada año, la solución más simple que se me ocurre es dividir entre dos. Esto nos deja con el gráfico correcto.
+
+```
+
+<br>
+
+A continuación, os presentaremos los efectos negativos del consumo de las drogas en EEUU (analizando la evolución del nivel de muertes), y nos centraremos sobre todo en el caso de los opioides y opiáceos que han sido los principales protagonistas de este número elevado de muertes en este país.
+
+<br>
+
+```{r grafico tipo opioides, echo = FALSE, eval = TRUE}
+
+df_sobredosis_t_opioides <- df_completo %>% select(1,5,8,17,20) %>% pivot_longer(cols = 2:5, names_to = "Categoría") %>% group_by(Categoría, Year) %>% ggplot() + geom_line(aes(Year, value, colour = Categoría)) + scale_color_manual(values = c("green", "orange", "purple", "blue"),
+                     labels = c("Cualquier opioide", "Heroína", "Opioides prescritos", "Opioides sintéticos")) + theme_clean() +
+  labs(
+  title = "Sobredosis por opioides en EEUU",
+  subtitle = "Separado por categoría",
+  caption = "Elaboración propia a partir de datos del CDC",
+  y = "Muertes\n",
+  x = "\nAño"
+)
+
+df_sobredosis_t_opioides
+
+```
+
+<br>
+
+La epidemia de los opioides (también conocido como la crisis de los opioides) es un problema muy grave en EEUU que provoca miles de muertes cada año. 
+De hecho, en el año 2021 según los valores provisionales que suministra the Centre for Disease and Control (CDC), [las muertes por sobredosis alcanzaron los 100.000 en el conjunto de los 50 Estados](https://www.cdc.gov/nchs/pressroom/nchs_press_releases/2021/20211117.htm). Esto supone un gran incremento con respecto a los años anteriores y seguramente haya influido la crisis sanitaria de la COVID-19 y las restricciones que se impusieron con el fin de mititgar dicha crisis sanitaria.
+
+<br>
+ 
+En este trabajo, comenzaremos explicando: que son los opioides, el origen y las causas de esta epidemia  y nos centraremos en varios gráficos durante la elaboración del presente trabajo que nos permitirán visualizar a grosso modo la relevancia y la importancia de esta situación tan grave en Estados Unidos. 
+
+<br>
+
+# Datos
+Los datos de la primera parte del trabajo provienen del departamento del "National Center for Health Statistics" organización dentro del "Centre for Disease Control" (CDC), que se encarga de suministrar todo tipo de datos relacionados con la mortalidad en EEUU. Concretamente, nos centraremos en las muertes a nivel nacional de la mortalidad por sobredosis de drogas. En la tabla de datos completa (la principal de este trabajo) se especifica las muertes totales y por género, de todo tipo de drogas, las muertes por distintas categorías de drogas y las muertes provocados por una combinación de distintas categorías de drogas. 
+
+<br>
+
+Los datos de la segunda parte del trabajo "Un análisis de la situación actual" provienen de la Vital Statistics Rapid Release, que forma parte también del mismo departamento dentro del CDC. Los datos de la población actualizada los conseguí a través del "United States Census" es decir, el Censo oficial de Estados Unidos.
+
+<br>
+
+# Qué son los opioides?
+
+<br>
+
+![La estructura química de morfina, el opioide prototípico.](C:/Users/ldp99/Desktop/trabajo_BigData/imagenes/morphine.png)
+
+<br>
+
+Los opioides son sustancias que actúan sobre los receptores de opioides que se encuentran en el cerebro con el fin de producir efectos parecidos a la morfina. En medicina, principalmente suelen utilizarse para el alivio del dolor, incluyendo la anastesia. Otros usos médicos incluyen la reducción de diarrea, terapía de sustitución de terapia de reemplazo para el trastorno por consumo de opioides, revertir sobredosis de opioides, suprimir la tos e incluso para las ejecuciones en estados Unidos. También son usados no medicamente por sus efectos eufóricos o con la intención de prevenir la abstinencia.
+
+<br>
+
+```{r grafico opioides sobredosis, echo = FALSE, eval = TRUE}
+
+
+df_sobredosis_opioid <- df_completo %>% select(1,5,6,7) %>% pivot_longer(cols = 3:4, names_to = "Género") %>% group_by(Género, Year) %>% ggplot() + geom_line(aes(Year, value, colour = Género), size = 2, alpha = 2) + geom_bar(aes(Year, Any_Opioid1/2), stat = "identity", fill = "blue", alpha = 0.1) + theme_clean() + labs(
+  title = "Sobredosis de todo tipo de opioides en EEUU",
+  subtitle = "Barras representan el nº total",
+  caption = "Elaboración propia a partir de datos del CDC",
+  y = "Muertes\n",
+  x = "\nAño"
+)
+df_sobredosis_opioid
+
+```
+
+<br>
+
+Los opioides son muy adictivos y  podemos clasificarlos generalmente en: opiáceos (i.e. morfina y codeína), oxycodeína (OxyContin, Percocet), hydrocodeína (Vicodin, Norco) y fentanilo. En 2018, se prescribieron 51.4 recetas para estas sutancias por cada 100 personas en EEUU, que equivale a más de 168 millones de recetas. 
+
+<br>
+
+El principal problema de estas drogas no es su uso, sino su sobreuso y dependencia. Los opioides son muy útiles en reducir la sensación de dolor para enfermos necesitados (enfermos crónicos, con cáncer, etc) pero llegado un punto se convierten en una droga letal y destructiva. Los adictos a estas sustancias no los toman para sentir placer como otras drogas "convencionales", sino que los ingieren para poder sobrevivir su día a día y no padecer los efectos de la abstinencia.
+
+<br>
+
+# El origen y las causas de esta epidemia
+
+![Logo de la empresa Purdue Pharma.](C:/Users/ldp99/Desktop/trabajo_BigData/imagenes/Purdue.jpg)
+
+## Las tres olas (fases) de la epidemia.
+
+### La primera ola (1990s hasta 2010)
+
+<br>
+
+La primera, que marca el inicio de esta situación, empezó en los años 1990 debido al empuje hacia un mayor uso de opioides en cuidados paliativos y el aumento de la promoción por parte de las empresas farmacéuticas.
+La principal empresa culpable de este aumento de opioides es Purdue Pharma, empresa que inventó "OxyContin" una de las drogas más importantes de esta crisis. Esta droga es relevante, ya que Purdue prometía a los doctores y los usuarios que "menos del 1% de los usuarios se convertirán en adictos". La empresa se basaba en un artículo publicado en una revista de medicina prestigiosa pero sin respaldo científico. Se trataba más bien de un experimento mal diseñado y sin ningún control científico correcto. A pesar de esto, realizaba un marketing masivo donde éste era su lema prioritario.
+
+<br>
+
+```{r grafico prescripciones, echo = FALSE, eval = TRUE}
+
+
+df_sobredosis_prescripcion <- df_completo %>% select(1,8,9,10) %>% pivot_longer(cols = 3:4, names_to = "Género") %>% group_by(Género, Year) %>% ggplot() + geom_line(aes(Year, value, colour = Género), size = 2, alpha = 2) + geom_bar(aes(Year, opioides_de_prescripción/2), stat = "identity", fill = "blue", alpha = 0.1) + theme_clean() + labs(
+  title = "Sobredosis de opioides de prescripción en EEUU",
+  subtitle = "Barras representan el nº total",
+  caption = "Elaboración propia a partir de datos del CDC",
+  y = "Muertes\n",
+  x = "\nAño"
+) + scale_y_continuous(breaks = seq(0, 20000, by = 3000))  + annotate("segment", x = 1999, xend = 2010, y = 3000, yend = 14500, colour = "blue") + annotate("segment", x = 2010, xend = 2019, y = 15000, yend = 15000, colour = "dark green") + annotate(geom = "text", x = 2001.5, y = 11000, label = "Aumento considerable", size = 4) + annotate(geom = "text", x = 2013, y = 17000, label = "Estabilidad", size = 4)
+
+df_sobredosis_prescripcion
+```
+<br>
+
+Lo que diferenciaba a esta droga de los demás opioides y opiáceos en el mercado, fue que los efectos eran más duraderos y por tanto no se debía ingerir tanta cantidad. Además, la empresa aseguraba que no se podía modificar para inyectarlo de manera eficaz (como la heroína) algo que luego se comprobó como falso. Otro aspecto que debemos recalcar, es la diferencia del sistema de salud de los Estados Unidos comparado con un sistema de salud nacional como existe en España. Allí, los doctores reciben dinero en base a cuantas medicinas prescriben y el precio de estos, por tanto, cobra un peso relevante las drogas que sumiistra. 
+
+<br>
+
+### La segunda ola (2010 hasta 2013)
+
+La segunda ola, comenzó sobre el año 2010 y duró hasta el 2013, y se caracteriza por el incremento del uso de la heroína en EEUU. Provocado por el aumento de la oferta y su consecuente reducción de precio. Esto provocó que muchas de las personas adictas a las pastillas terapéuticas (legales) como OxyContin, optaron por la heroína al ser una alternativa más barata y más fácil de conseguir*. A su vez, también hubo una reformulación del Oxycontin que permitió reducir la habilidad de convertirlo en polvo para luego ser mezclado con agua e inyectado.   
+
+<br>
+
+
+
+*Era más fácil de conseguir debido al mayor control impuesto por el Estado en la prescripción de pastillas terapéuticas como el OxyContin.
+
+<br>
+
+```{r grafico heroin, echo = FALSE, eval = TRUE}
+
+
+df_sobredosis_heroin <- df_completo %>% select(1,20,21,22) %>% pivot_longer(cols = 3:4, names_to = "Género") %>% group_by(Género, Year) %>% ggplot() + geom_line(aes(Year, value, colour = Género), size = 2, alpha = 2) + geom_bar(aes(Year, Heroin4/2), stat = "identity", fill = "blue", alpha = 0.1) + theme_clean() + labs(
+  title = "Sobredosis por heroína en EEUU",
+  subtitle = "Barras representan el nº total",
+  caption = "Elaboración propia a partir de datos del CDC",
+  y = "Muertes\n",
+  x = "\nAño"
+) 
+df_sobredosis_heroin
+
+```
+
+<br>
+
+### La tercera ola (2013 hasta la actualidad)
+
+La tercera, y actual ola, comenzó en 2013 y se caracteriza por un nuevo tipo de drogas en el mercado, los opioides sintéticos. Fentanilo es el  más común, y su característica principal es que es hasta 100 veces más potente que la morfina. Evidentemente, su uso conllevará a una mayor letalidad algo que podemos observar en los datos. También cabe mencionar que, en la mayoría de casos de sobredosis letales, el usuario muere por no conocer la composición de la droga y no por la droga que ingiere en sí (o almenos la que piensa que está ingeriendo).
+
+<br>
+
+```{r grafico synthetic, echo = FALSE, eval = TRUE}
+
+
+df_sobredosis_synthetic <- df_completo %>% select(1,17,18,19) %>% pivot_longer(cols = 3:4, names_to = "Género") %>% group_by(Género, Year) %>% ggplot() + geom_line(aes(Year, value, colour = Género), size = 2, alpha = 2) + geom_bar(aes(Year, Synthetic_opioids/2), stat = "identity", fill = "blue", alpha = 0.1) + theme_clean() + labs(
+  title = "Sobredosis por opioides sintéticos en EEUU",
+  subtitle = "Barras representan el nº total",
+  caption = "Elaboración propia a partir de datos del CDC",
+  y = "Muertes\n",
+  x = "\nAño"
+) 
+df_sobredosis_synthetic
+
+```
+
+<br>
+
+Para poner en perspectiva la cantidad letal del Fentanilo, a continuación os mostramos una foto con 2 miligramos comparado con un penique estadounidense (la moneda presenta un diámetro de 19.05 milímetros). Esta cantidad, sería letal para la mayoría de personas.
+
+<br>
+
+![Dosis letal de fentanilo.](C:/Users/ldp99/Desktop/trabajo_BigData/imagenes/fentanyl_pic.jpg)
+<br>
+<br>
+
+# Un análisis de la situación actual
+
+<br>
+
+La situación actual de sobredosis letales de drogas se ha agravado exponencialmente, en parte debido al aumento de uso de opioides sintéticos como hemos ido mencionando y además debido a la crisis sanitaria de la COVID-19. Evidentemente, las restricciones impuestas llevan a un aislamiento de las personas que puede provocar grandes problemas de soledad y reducción de relaciones sociales. Algo que puede ser mortal para personas drogodependientes ya que no pueden solicitar ayuda de una manera tan fácil. Es por esto, que a continuación os presentamos datos actualizados hasta abril de 2021 tanto del conjunto de Estados Unidos, como separado por Estados y a nivel local en la ciudad de nueva York.
+
+<br>
+
+## La situación en el conjunto del país
+
+<br>
+
+ A continuación, os mostramos una tabla con los datos de la evolución de los últimos tres años de las sobredosis letales en el conjunto de Estados Unidos.
+
+<br>
+
+```{r codigo EEUU actualizado, echo = FALSE, eval = TRUE}
+
+df_estados <- rio::import(here::here("./datos/drug_data_by_state.csv"))
+
+#Eliminamos espacios en blanco de los nombres de las columnas
+names(df_estados) <- gsub(" ", "_", names(df_estados))
+
+df_estados <- df_estados %>% mutate(region = tolower(State_Name)) 
+MainStates <- map_data("state")
+
+df_estados <- df_estados %>% filter(Month == "April", Indicator == "Number of Drug Overdose Deaths")
+
+#valores actuaiados todo EEUU
+df_EEUU_actualizado <- df_estados %>% select(State, Year, Data_Value)
+
+colnames(df_EEUU_actualizado)[3] <- "Muertes"
+df_EEUU_actualizado$Muertes <- as.numeric(gsub(",", "", df_EEUU_actualizado$Muertes))
+
+
+df_EEUU_actualizado_total <-  df_EEUU_actualizado %>% rename(País = State, Año = Year) %>% filter(País == "US", Año %in% c(2019, 2020, 2021)) %>% gt() %>% tab_header(
+  title = "Sobredosis letales en EEUU",
+  subtitle = "Desde abril 2019 hasta abril 2021") %>% tab_source_note("Elaboración propia a partir de datos del VSRR") %>% 
+  tab_style(
+    locations = cells_column_labels(columns = everything()),
+    style = list(
+      cell_borders(sides = "bottom", weight = px(3)),
+      cell_text(weight = "bold"))
+      ) %>% tab_style(
+        locations = cells_title(groups = "title"),
+        style = list(cell_text(weight = "bold", size = 24)
+      )
+    ) %>% data_color(columns = "Muertes",
+                     colors = scales::col_numeric(
+                       palette = c("orange", "red"),
+                       domain = c(65000, 100000))
+    )
+  
+df_EEUU_actualizado_total
+
+
+```
+
+<br>
+
+### Visualización cartográfica de las sobredosis en valores absolutos en EEUU
+
+<br>
+
+En este apartado, representamos el mapa de EEUU con los valores (anuales) de las muertes por sobredosis de cualquier droga en Abril de 2021. Es decir, se toman en cuenta los valores desde el Abril de 2020 hasta el abril de 2021 para cads Estado. Podemos observar que la mayoría de muertes ocurren en los grandes Estados (California, Texas y Florida) pero esto se debe principalmente al hecho de qué estos Estados presentan mayores nivel de población. Dicho esto, aún observando los valores absolutos, podemos ver que el nor-este de Estados unidos (la zona de West Vriginia, Ohio y Pennsylvania ) presentan valores elevados en comparación con su población.
+
+<br>
+
+```{r codigo por estados actualizado, echo = FALSE, eval = TRUE}
+#valores atualizados por Estados
+MergedStates <- inner_join(MainStates, df_estados, by = "region")
+
+MergedStates$Data_Value <- as.numeric(gsub(",", "", MergedStates$Data_Value))
+
+map_states <- ggplot() + geom_polygon(data = MergedStates, aes(x = long, y = lat, group = group, fill = Data_Value), colour = "black") + scale_fill_continuous(name = "Sobredosis letales", low = "lightblue", high = "darkblue", breaks = c( 2000, 4000, 6000, 8000)) + labs(title = "Sobredosis letales en EEUU por Estado", subtitle = "Valores anuales (Abril 2020 - Abril 2021)") + theme_classic()
+#por defecto elige los valores más recientes, es decir, los valores anuales hasta abril de 2021. (abril 2020 hasta abril 2021)
+ggplotly(map_states)
+
+
+```
+<br>
+
+### Visualización cartográfica de las sobredosis en valores per cápita en EEUU
+
+<br>
+
+El siguiente mapa de EEUU presenta las mismas caracterísitcas pero esta vez se tratan de valores relativos de sobredosis letales. Es decir, hemos calculado el número de sobredosis letales en proporción a la población. Concretamente, los números representan las muertes por cada 100.000 habitantes en cada Estado.
+
+<br>
+
+```{r codigo por estados actualizado per cápita, echo = FALSE, eval = TRUE}
+
+#muertes per cápita
+df_state_population <- rio::import(here::here("./datos/state_population.csv"))
+
+names(df_state_population) <- as.matrix(df_state_population[1, ])
+df_state_population <- df_state_population[-1, ]
+df_state_population <- df_state_population[, -3]
+df_state_population <- df_state_population[, -3]
+df_state_population <- df_state_population[-52, ]
+
+df_state_population <- df_state_population %>% mutate(region = tolower(State)) 
+df_state_population <- df_state_population %>% rename(poblacion = `2021`)
+
+df_state_deaths_pop <- inner_join(MergedStates, df_state_population, by = "region")
+
+#crear variable muertes/poblacion
+
+map_states_pc <- df_state_deaths_pop %>% mutate(Muertes_pc = (Data_Value/poblacion) * 100000)
+
+map_states_pc <- map_states_pc %>% ggplot() + geom_polygon(data = map_states_pc, aes(x = long, y = lat, group = group, fill = Muertes_pc), colour = "black") + scale_fill_continuous(name = "Sobredosis letales", low = "lightblue", high = "darkblue", breaks = c( 10, 20, 30, 40, 50, 60, 70, 80, 90)) + labs(title = "Sobredosis letales per cápita en EEUU por Estado", subtitle = "Valores anuales (Abril 2020 - Abril 2021)") + theme_classic()
+#por defecto elige los valores más recientes, es decir, los valores anuales hasta abril de 2021. (abril 2020 hasta abril 2021)
+ggplotly(map_states_pc)
+```
+<br>
+
+## La situación en la ciudad de Nueva York
+
+<br>
+
+Por último. os mostramos el caso particular de una de las ciudades más importantes de EEUU, nueva York. Es interesante estudiar esta ciudad ya que a comienzos de diciembre de 2021, se aprobaron y abrieron los dos primeros "supervised injection site" (sitio supervisados de consumo de drogas) de todo el país. Se encuentran concretamente en East Harlem y Washington Heights. Estos centros se crean con la intención de reducir las sobredosis letales, reducir la transmisión de IVH y hepatititis C, reducir las infecciones de piel debido a las inyecciones e intentar aumentar el número de usuarios que solicitan tratamiento de abuso/adicción de drogas. 
+
+<br>
+
+```{r codigo nueva york, echo = FALSE, eval = TRUE}
+#valores actualizados en una ciudad (Nueva York ciudad)
+
+
+df_NYC_actualizado <- df_estados %>% select(State, Year, Data_Value)
+df_NYC_actualizado <- df_NYC_actualizado %>% filter(State == "YC")
+
+colnames(df_NYC_actualizado)[3] <- "Muertes"
+colnames(df_NYC_actualizado)[2] <- "Año"
+colnames(df_NYC_actualizado)[1] <- "Ciudad"
+
+df_NYC_actualizado$Muertes <- as.numeric(gsub(",", "", df_NYC_actualizado$Muertes))
+
+df_NYC_actualizado_total <- df_NYC_actualizado %>% ggplot() + geom_bar(aes(x = Año, y = Muertes), stat = "identity", fill = "green") + theme_classic() + transition_time(Año) + labs(
+  title = "Evolución de sobredosis letales en Nueva York*",
+  subtitle = "Ciudad de Nueva York",
+  caption = "Elaboración propia a partir de datos de VSRR"
+) + scale_x_continuous(limits = c(2014, 2022), breaks = seq(2015, 2021, by = 1))
+
+df_NYC_actualizado_total
+
+```
+
+<br> 
+
+# Conclusiones
+
+<br>
+
+Después de analizar los gráficos y las tablas con los datos de las sobredosis por drogas en Estados Unidos, podemos concluir que esto es un gran problema en este país. Sobre todo, el gran peso del impacto de las opioides en las muertes es algo que se tiene que intentar paliar y reducir. En el año 2019, de 70.000 muertes totales, alrededor de 50.000 eran provocados por el consumo de opioides o la presencia de estos en otras drogas. Los nuevos centros supervisados de consumo que se han implantado en Nueva York puede ser una buena solución, aunque a largo plazo se deberían realizar reformas e impulsar políticas del tipo estrcturales. 
+
+<br>
+
+# Bibliografía
+
+<br>
+
+Los datos los descargué de las siguientes páginas:
+
+* Los datos actualizados los descargué en el siguiente [enlace](https://www.cdc.gov/nchs/pressroom/nchs_press_releases/2021/20211117.htm)
+* Los datos del conjunto de EEUU separado por categorías los descargué del siguiente [enlace](https://www.drugabuse.gov/drug-topics/trends-statistics/overdose-death-rates)
+* Los datos de la población de 2021 lo descagué del siguiente [enlace](https://www.census.gov/data/tables/time-series/demo/popest/2020s-state-total.html)
+
+La inspiración que tuve a la hora de realizar este trabajo fue el siguiente [artículo](https://en.wikipedia.org/wiki/Opioid_epidemic_in_the_United_States) de Wikipedia.
+
